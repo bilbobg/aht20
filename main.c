@@ -14,6 +14,8 @@
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 
+#define btoa(x) ((x)?"true":"false")
+
 /* list of I2C addresses */
 #define AHTXX_ADDRESS_X38                 0x38  //AHT15/AHT20/AHT21/AHT25 I2C address, AHT10 I2C address if address pin to GND
 
@@ -84,30 +86,46 @@ uint8_t aht20_getstatus (int fd) {
 
     cout << "get status register: " << "0x" << setfill('0') << setw(2) << hex << uppercase << (int)data[0] << nouppercase << dec << ", " << bits << endl;
 
-    return data[0];
+    return data[0]; //- under normal conditions status is 0x18 & 0x80 if the sensor is busy
 }
+
+bool aht20_checkCRC(uint8_t *data) {
+    uint8_t crc = 0xFF;                                      //initial value
+
+    for (uint8_t byteIndex = 0; byteIndex < 6; byteIndex ++) //6-bytes in data, {status, RH, RH, RH+T, T, T, CRC}
+    {
+      crc ^= data[byteIndex];
+
+      for(uint8_t bitIndex = 8; bitIndex > 0; --bitIndex)    //8-bits in byte
+      {
+        if   (crc & 0x80) {crc = (crc << 1) ^ 0x31;}         //0x31=CRC seed/polynomial 
+        else              {crc = (crc << 1);}
+      }
+    }
+
+    return (crc == data[6]);
+}
+
 
 int main(void) {
 
-    int i2c_bus;
+    int fd;
 
-    if(( i2c_bus = open( "/dev/i2c-0", O_RDWR )) < 0 )
+    if(( fd = open( "/dev/i2c-0", O_RDWR )) < 0 )
     {
-        printf("Unable to open file /dev/i2c-0.\n");
+        printf("unable to open file /dev/i2c-0.\n");
     }
 
-    if( ioctl( i2c_bus, I2C_SLAVE, AHTXX_ADDRESS_X38 ) < 0 )
+    if( ioctl( fd, I2C_SLAVE, AHTXX_ADDRESS_X38 ) < 0 )
     {
-        printf("Open chip at 0x%02X FAILED file %d\n", AHTXX_ADDRESS_X38, i2c_bus);
+        printf("open chip at 0x%02X FAILED file %d\n", AHTXX_ADDRESS_X38, fd);
         return -1;
     }
     else 
     {
-        printf("Open chip at 0x%02X Succeeded, fd %d\n", AHTXX_ADDRESS_X38, i2c_bus);
+        printf("open chip at 0x%02X succeeded, fd %d\n", AHTXX_ADDRESS_X38, fd);
         //return 1;
     }
-
-    int fd = i2c_bus;
 
     aht20_reset(fd);
 
@@ -131,15 +149,17 @@ int main(void) {
 
         result = read(fd, data, 7);
 
-    } while ((data[0] & AHTXX_STATUS_CTRL_BUSY) == AHTXX_STATUS_CTRL_BUSY);
+    } while ((data[0] & AHTXX_STATUS_CTRL_BUSY) == AHTXX_STATUS_CTRL_BUSY); //check if sensor is busy
 
     cout << "measurment done! bytes read: " << result << endl;
+
+    cout << "CRC check: " << btoa(aht20_checkCRC(data)) << endl;
 
     for (int i = 0; i < result; i++) {
 
         bitset<8> bits(data[i]);
 
-        cout << "data: " << "0x" << setfill('0') << setw(2) << hex << uppercase << (int)data[i] << nouppercase << dec << ", " << bits << endl;
+        cout << "byte [" << i << "] -> " << "0x" << setfill('0') << setw(2) << hex << uppercase << (int)data[i] << nouppercase << dec << ", " << bits << endl;
     }
 
     unsigned long humidity   = data[1];                          //20-bit raw humidity data
@@ -162,4 +182,5 @@ int main(void) {
 
     close(fd);
     
+    return 1;
 }
