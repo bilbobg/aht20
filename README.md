@@ -1,6 +1,6 @@
 # aht20 communication, no wiringPi
 
-basic i2c communication with ath20 temp/humidity sensor
+basic i2c communication with aht20 temp/humidity sensor
 
 compile:
 ```
