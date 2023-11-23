@@ -84,7 +84,7 @@ uint8_t aht20_getstatus (int fd) {
 
     bitset<8> bits(data[0]);
 
-    cout << "get status register: " << "0x" << setfill('0') << setw(2) << hex << uppercase << (int)data[0] << nouppercase << dec << ", " << bits << endl;
+    cout << "get status register -> " << "0x" << setfill('0') << setw(2) << hex << uppercase << (int)data[0] << nouppercase << dec << ", " << bits << endl;
 
     return data[0]; //- under normal conditions status is 0x18 & 0x80 if the sensor is busy
 }
