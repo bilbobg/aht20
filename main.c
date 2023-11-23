@@ -8,14 +8,14 @@
 #include <bitset>
 #include <unistd.h>
 #include <iostream>
-#include <wiringPi.h>
-#include <wiringPiI2C.h>
+#include <iomanip>
 
-/*
 #include <linux/types.h>
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
-*/
+
+/* list of I2C addresses */
+#define AHTXX_ADDRESS_X38                 0x38  //AHT15/AHT20/AHT21/AHT25 I2C address, AHT10 I2C address if address pin to GND
 
 #define AHT2X_INIT_REG                    0xBE  //initialization register, for AHT2x only
 #define AHTXX_STATUS_REG                  0x71  //read status byte register
@@ -82,14 +82,32 @@ uint8_t aht20_getstatus (int fd) {
 
     bitset<8> bits(data[0]);
 
-    cout << "get status register: " << "0x" << hex << uppercase << (int)data[0] << nouppercase << dec << ", " << bits << endl;
+    cout << "get status register: " << "0x" << setfill('0') << setw(2) << hex << uppercase << (int)data[0] << nouppercase << dec << ", " << bits << endl;
 
     return data[0];
 }
 
 int main(void) {
-    
-    int fd = wiringPiI2CSetup(0x38);
+
+    int i2c_bus;
+
+    if(( i2c_bus = open( "/dev/i2c-0", O_RDWR )) < 0 )
+    {
+        printf("Unable to open file /dev/i2c-0.\n");
+    }
+
+    if( ioctl( i2c_bus, I2C_SLAVE, AHTXX_ADDRESS_X38 ) < 0 )
+    {
+        printf("Open chip at 0x%02X FAILED file %d\n", AHTXX_ADDRESS_X38, i2c_bus);
+        return -1;
+    }
+    else 
+    {
+        printf("Open chip at 0x%02X Succeeded, fd %d\n", AHTXX_ADDRESS_X38, i2c_bus);
+        //return 1;
+    }
+
+    int fd = i2c_bus;
 
     aht20_reset(fd);
 
@@ -99,53 +117,49 @@ int main(void) {
 
     uint8_t command[] = {AHTXX_START_MEASUREMENT_REG, AHTXX_START_MEASUREMENT_CTRL, AHTXX_START_MEASUREMENT_CTRL_NOP};
 
-    uint8_t buf_in[32];
+    uint8_t data[32];
 
     write(fd, command, 3);
 
     cout << "start measurment" << endl;
 
-    if (1) {
+    int result;
 
-        do {
+    do {
 
-            usleep(80 * 1000);
+        usleep(80 * 1000);
 
-            read(fd, buf_in, 7);
+        result = read(fd, data, 7);
 
-        } while ((int)buf_in[0] != 0x1c);
+    } while ((data[0] & AHTXX_STATUS_CTRL_BUSY) == AHTXX_STATUS_CTRL_BUSY);
 
-        cout << "measurment complete" << endl;
+    cout << "measurment done! bytes read: " << result << endl;
 
-        int result = read(fd, buf_in, 7);
+    for (int i = 0; i < result; i++) {
 
-        cout << "bytes read: " << result << endl;
+        bitset<8> bits(data[i]);
 
-        for (int i = 0; i < result; i++) {
-
-            bitset<8> bits(buf_in[i]);
-
-            cout << "data: " << "0x" << hex << uppercase << (int)buf_in[i] << nouppercase << dec << ", " << bits << endl;
-        }
-
-        unsigned long humidity   = buf_in[1];                          //20-bit raw humidity data
-            humidity <<= 8;
-            humidity  |= buf_in[2];
-            humidity <<= 4;
-            humidity  |= buf_in[3] >> 4;
-
-        if (humidity > 0x100000) {humidity = 0x100000;}             //check if RH>100, no need to check for RH<0 since "humidity" is "uint"
-
-        printf("humidity: %f\n", ((float)humidity / 0x100000) * 100);
-
-            unsigned long temperature   = buf_in[3] & 0x0F;                //20-bit raw temperature data
-                    temperature <<= 8;
-                    temperature  |= buf_in[4];
-                    temperature <<= 8;
-                    temperature  |= buf_in[5];
-
-        printf("temp: %f\n", ((float)temperature / 0x100000) * 200 - 50);
-    } else {
-        printf("reading not complete\n");
+        cout << "data: " << "0x" << setfill('0') << setw(2) << hex << uppercase << (int)data[i] << nouppercase << dec << ", " << bits << endl;
     }
+
+    unsigned long humidity   = data[1];                          //20-bit raw humidity data
+        humidity <<= 8;
+        humidity  |= data[2];
+        humidity <<= 4;
+        humidity  |= data[3] >> 4;
+
+    if (humidity > 0x100000) {humidity = 0x100000;}             //check if RH>100, no need to check for RH<0 since "humidity" is "uint"
+
+    printf("humidity: %f\n", ((float)humidity / 0x100000) * 100);
+
+        unsigned long temperature   = data[3] & 0x0F;                //20-bit raw temperature data
+                temperature <<= 8;
+                temperature  |= data[4];
+                temperature <<= 8;
+                temperature  |= data[5];
+
+    printf("temp: %f\n", ((float)temperature / 0x100000) * 200 - 50);
+
+    close(fd);
+    
 }
