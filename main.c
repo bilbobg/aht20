@@ -153,14 +153,14 @@ int main(void) {
 
     cout << "measurment done! bytes read: " << result << endl;
 
-    cout << "CRC check: " << btoa(aht20_checkCRC(data)) << endl;
-
     for (int i = 0; i < result; i++) {
 
         bitset<8> bits(data[i]);
 
         cout << "byte [" << i << "] -> " << "0x" << setfill('0') << setw(2) << hex << uppercase << (int)data[i] << nouppercase << dec << ", " << bits << endl;
     }
+
+    cout << "CRC check -> " << btoa(aht20_checkCRC(data)) << endl;
 
     unsigned long humidity   = data[1];                          //20-bit raw humidity data
         humidity <<= 8;
@@ -170,7 +170,7 @@ int main(void) {
 
     if (humidity > 0x100000) {humidity = 0x100000;}             //check if RH>100, no need to check for RH<0 since "humidity" is "uint"
 
-    printf("humidity: %f\n", ((float)humidity / 0x100000) * 100);
+    printf("humidity: %f [%%]\n", ((float)humidity / 0x100000) * 100);
 
         unsigned long temperature   = data[3] & 0x0F;                //20-bit raw temperature data
                 temperature <<= 8;
@@ -178,7 +178,7 @@ int main(void) {
                 temperature <<= 8;
                 temperature  |= data[5];
 
-    printf("temp: %f\n", ((float)temperature / 0x100000) * 200 - 50);
+    printf("temp: %f [°C]\n", ((float)temperature / 0x100000) * 200 - 50);
 
     close(fd);
     
